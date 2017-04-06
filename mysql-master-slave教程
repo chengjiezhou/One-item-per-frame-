@@ -35,5 +35,90 @@ step2.配置Slave从服务器（windows）
     show slave status\G;
     在返回信息中，只有slave_IO_running & slave_SQL_running 同时为yes,才表明配置成功
     
-    
+  异常调整：
+  解决办法I：
+    1.首先停掉Slave服务：slave stop
+    2.到主服务器上查看主机状态：
+    记录File和Position对应的值。
+    mysql> show master status;
+    +------------------+-----------+--------------+------------------+
+    | File | Position | Binlog_Do_DB | Binlog_Ignore_DB |
+    +------------------+-----------+--------------+------------------+
+    | mysql-bin.000020 | 135617781 | | |
+    +------------------+-----------+--------------+------------------+
+    1 row in set (0.00 sec)
+    3.到slave服务器上执行手动同步：
+    mysql> change master to
+    > master_host='master_ip',
+    > master_user='user',
+    > master_password='pwd',
+    > master_port=3307,
+    > master_log_file='mysql-bin.000020',
+    > master_log_pos=135617781;
+    1 row in set (0.00 sec)
+    mysql> slave start;
+    1 row in set (0.00 sec)
+    再次查看slave状态发现：
+    Slave_IO_Running: Yes
+    Slave_SQL_Running: Yes
+    ...
+    Seconds_Behind_Master: 0
   
+  解决办法II：
+    mysql> slave stop;
+    mysql> set GLOBAL SQL_SLAVE_SKIP_COUNTER=1;
+    mysql> slave start;
+
+    自己的使用体会:方法一是强制性从某一个点开始同步,会有部分没有同步的数据丢失,后续主服务器上删除记录同步也会有一些错误信息,不会影响使用.方法二不一定会有效果.
+
+2,还需要做的一些优化与监视:
+show full processlist; //查看mysql当前同步线程号
+skip-name-resolve       //跳过dns名称查询，有助于加快连接及同步的速度
+max_connections=1000    //增大Mysql的连接数目，(默认100)
+max_connect_errors=100 //增大Mysql的错误连接数目,(默认10)
+ 
+
+查看日志一些命令
+1,  show master status\G;
+           在这里主要是看log-bin的文件是否相同。
+    show slave status\G;
+    在这里主要是看:
+                   Slave_IO_Running=Yes
+                   Slave_SQL_Running=Yes
+   如果都是Yes,则说明配置成功.
+2,在master上输入show processlist\G;
+     mysql> SHOW PROCESSLIST\G
+     *************************** 1. row ***************************
+       Id: 2
+       User: root
+       Host: localhost:32931
+       db: NULL
+       Command: Binlog Dump
+       Time: 94
+       State: Has sent all binlog to slave; waiting for binlog to
+         be updated
+       Info: NULL
+   如果出现Command: Binlog Dump,则说明配置成功.
+ 
+ 
+stop slave    #停止同步
+start slave    #开始同步，从日志终止的位置开始更新。
+SET SQL_LOG_BIN=0|1  #主机端运行，需要super权限，用来开停日志，随意开停，会造成主机从机数据不一致，造成错误
+SET GLOBAL SQL_SLAVE_SKIP_COUNTER=n  # 客户端运行，用来跳过几个事件，只有当同步进程出现错误而停止的时候才可以执行。
+RESET MASTER  #主机端运行,清除所有的日志，这条命令就是原来的FLUSH MASTER
+RESET SLAVE   #从机运行，清除日志同步位置标志，并重新生成master.info
+虽然重新生成了master.info,但是并不起用，最好，将从机的mysql进程重启一下，
+LOAD TABLE tblname FROM MASTER #从机运行，从主机端重读指定的表的数据，每次只能读取一个，受timeout时间限制，需要调整timeout时间。执行这个命令需要同步账号有 reload和super权限。以及对相应的库有select权限。如果表比较大，要增加net_read_timeout 和 net_write_timeout的值
+LOAD DATA FROM MASTER  #从机执行，从主机端重新读入所有的数据。执行这个命令需要同步账号有reload和super权限。以及对相应的库有select权限。如果表比较大，要增加net_read_timeout 和 net_write_timeout的值
+CHANGE MASTER TO master_def_list  #在线改变一些主机设置，多个用逗号间隔,比如
+CHANGE MASTER TO
+  MASTER_HOST='master2.mycompany.com',
+  MASTER_USER='replication',
+  MASTER_PASSWORD='bigs3cret'
+MASTER_POS_WAIT() #从机运行
+SHOW MASTER STATUS #主机运行，看日志导出信息
+SHOW SLAVE HOSTS #主机运行，看连入的从机的情况。
+SHOW SLAVE STATUS (slave)
+SHOW MASTER LOGS (master)
+SHOW BINLOG EVENTS [ IN 'logname' ] [ FROM pos ] [ LIMIT [offset,] rows ]
+PURGE [MASTER] LOGS TO 'logname' ; PURGE [MASTER] LOGS BEFORE 'date' 
