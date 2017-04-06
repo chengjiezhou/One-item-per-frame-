@@ -1,0 +1,6 @@
+* * * * * sh /soft/update_code.sh
+#获取发稿数据定时任务
+#* * * * * sleep 09; cd /home/wwwroot/*****/ && /usr/bin/php shell.php    /Home/Information/getTaskData  >/dev/null &
+
+vim /soft/update_code.sh
+cd cd /home/wwwroot/*****/  && svn checkout  --username ******     --password ******   svn://url
