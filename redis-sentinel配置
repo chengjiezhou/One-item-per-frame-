@@ -1,0 +1,138 @@
+source_link:http://blog.csdn.net/pi9nc/article/details/17735653
+
+ 一个集群配置最少需要三台机器，那么我就三台虚拟机,三台虚拟机分别安装同样的redis的环境
+
+ip分别：
+
+    192.168.9.17  （redis sentinel 集群监控）
+    192.168.9.18  （redis 主）
+    192.168.9.19  （redis 从）
+
+redis配置:
+
+主的redis配置文件,使用默认的配置文件就可以了，如果你需要设计其他参数
+
+从的redis配置文件，添加
+
+#从的redis配置文件，需要添加
+vim /etc/redis/6379.conf
+slaveof 192.168.9.18 6379
+
+启动主从redis
+
+#启动主redis（192.168.9.18）
+/etc/init.d/redis_6379.conf start
+#启动从redis（192.168.9.19）
+/etc/init.d/redis_6379.conf start
+
+查看主redis信息
+
+#查看主redis的信息
+redis-cli -h 192.168.9.18 info Replication
+
+# Replication
+role:master #代表192.168.9.18:6379 这台redis是主
+connected_slaves:1
+slave0:192.168.9.18,6379,online
+
+查看从redis信息
+
+#查看主redis的信息
+redis-cli -h 192.168.9.19 info Replication
+
+# Replication
+role:slave #代表192.168.9.18:6379 这台redis是主
+master_host:192.168.9.18
+master_port:6379
+master_link_status:up
+master_last_io_seconds_ago:4
+master_sync_in_progress:0
+slave_priority:100
+slave_read_only:1
+connected_slaves:0
+
+配置redis sentinel集群监控服务
+
+1.添加一份redis sentinel 配置文件
+
+vim /etc/redis/sentinel.conf
+
+##redis-0
+##sentinel实例之间的通讯端口
+port 26379
+#master1
+sentinel monitor master1 192.168.9.18 6379 1
+sentinel down-after-milliseconds master1 5000
+sentinel failover-timeout master1 900000
+sentinel can-failover master1 yes
+sentinel parallel-syncs master1 2
+
+#master2  可以添加多组主从的redis监听
+...
+..
+..
+
+2.有配置文件了，那么启动redis sentinel做redis集群监听
+
+redis-sentinel sentinel.conf --sentinel
+
+
+好了，所有环境都搭好了。下面开始正式的演示
+
+1.正常演示。
+
+    把主的redis启动
+    把从的redis启动
+    把redis sentinel 集群监听启动
+
+观察redis sentinel 日志信息
+
+这里很清楚地看到，从的redis加入了集群
+
+[4925] 15 Oct 03:42:21.889 * +slave slave 192.168.9.19:6379 192.168.9.19 6379 @ master1 192.168.9.18 6379
+
+执行以下命令，查看redis主从信息
+
+[root@localhost vagrant]# redis-cli -h 192.168.9.17 -p 26379 info Sentinel
+# Sentinel
+sentinel_masters:1
+sentinel_tilt:0
+sentinel_running_scripts:0
+sentinel_scripts_queue_length:0
+master0:name=master1,status=ok,address=192.168.9.18:6379,slaves=1,sentinels=1
+
+那么表示一切都正常了。你的redis sentinel集群已经配置成功！
+
+2.故障演示
+
+
+2.1当主的redis 服务器岩机了，会发生什么情况呢？
+
+执行以下命令使用主的redis服务停止
+
+redis-cli -h 192.168.9.18 -p 6379 shutdown #表示把192.168.9.18这台redis 关闭
+
+关闭后，我们再查看redis sentinel 的日志情况
+
+
+这张图片很清晰地反应到，redis sentinel 监控到主的redis服务停止，然后自动把从的redis切换到主。
+
+再执行以下命令，查看redis主从信息
+
+[root@localhost vagrant]# redis-cli -h 192.168.33.111 -p 26379 info Sentinel
+# Sentinel
+sentinel_masters:1
+sentinel_tilt:0
+sentinel_running_scripts:0
+sentinel_scripts_queue_length:0
+master0:name=master1,status=ok,address=192.168.9.19:6379,slaves=1,sentinels=1
+
+把从已经升为主了。那么自动切换就已经成功了！
+
+
+2.2 当我们已经发现，一台redis发生故障了，可能会收到一些故障信息，那么再把服务已关闭的redis恢复服务状态，会发生怎么样的情况呢？
+
+redis sentinel 集群服务，会把上次主redis重新加入服务中，但是他再以不是主的redis了，变成从的reids。
+
+哈.....完成了。。。下篇会写关于，客户端调用主从集群自动切换使用例子。我会以java为使用客户端.
+
