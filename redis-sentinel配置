@@ -64,7 +64,7 @@ port 26379
 sentinel monitor master1 192.168.9.18 6379 1
 sentinel down-after-milliseconds master1 5000
 sentinel failover-timeout master1 900000
-sentinel can-failover master1 yes
+#sentinel can-failover master1 yes
 sentinel parallel-syncs master1 2
 
 #master2  可以添加多组主从的redis监听
