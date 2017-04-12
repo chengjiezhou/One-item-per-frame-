@@ -1,0 +1,233 @@
+1 系统环境
+
+OS: CentOS 6.5 x64
+JAVA: JDK 1.8 x64
+编辑
+1.1 安装准备：
+
+ElasticSearch（简称ES）由java语言实现，运行环境依赖java。ES 2.x版本，官方需要至少使用jdk1.8的环境，推荐使用Oracle JDK version 1.8.0_25。
+
+ES集群统一使用JRE 1.8 环境
+
+编辑2 安装
+
+编辑2.1 安装JAVA 环境
+
+JDK下载URL：http://xxx/soft/java/jdk-8u65...
+安装： # rpm -ivh jdk-8u65-linux-x64.rpm
+编辑
+2.2 安装ES
+
+1) 安装ES
+
+ES下载地址：http://xxx/soft/elasticsearch...
+安装软件包： # rpm -ivh elasticsearch-2.1.1.rpm
+
+2) 配置ES
+
+ES服务目录： /usr/share/elasticsearch
+配置文件目录：/etc/elasticsearch/
+配置文件1： /etc/elasticsearch/elasticsearch.yml
+
+配置文件说明：
+集群名称，默认为elasticsearch， 命名规则为 es-产品名-ES版本
+
+cluster.name: es-app-2.1.1
+节点名称，es启动时会自动创建节点名称，但你也可进行配置
+
+node.name: es-1
+设置索引的分片数
+
+index.number_of_shards: 5
+设置索引的副本数
+
+index.number_of_replicas: 1
+是否为主节点，一个集群中建议只配置一个主节点
+
+node.master: false
+数据存储位置
+
+path.data: /data1/elasticsearch/data
+这个参数是用来同时设置bind_host和publish_host上面两个参数 v2.0以上默认是127.0.0.1
+
+network.host: 0.0.0.0
+设置对外服务的http端口,默认为9200
+
+http.port: 9200
+设置节点间交互的tcp端口,默认是9300
+
+transport.tcp.port: 9300
+
+index.version.created : 2010199index.max_result_window: 1500000
+这是一个集群中的主节点的初始列表,当节点(主节点或者数据节点)启动时使用这个列表进行探测
+
+discovery.zen.ping.unicast.hosts: ["ip:9300", "ip:9300"]
+由于阿里禁止广播，建议关闭广播
+
+discovery.zen.ping.multicast.enabled: false
+ping 的超时时间
+
+discovery.zen.ping_timeout: 10s
+ping 的超时时间 Fault Detection
+
+discovery.zen.fd.ping_timeout: 10s
+ping 重试的次数
+
+discovery.zen.fd.ping_retries: 6
+ping 的间隔
+
+discovery.zen.fd.ping_interval: 5s
+cache 的最大占比
+
+indices.fielddata.cache.size : 50%
+线程池的配置
+
+threadpool: search:
+
+  type: fixed
+  size: 7
+  queue: 1000
+  # reject_policy: caller
+
+threadpool: index:
+
+  type: fixed
+  size: 3
+  queue: 200
+  # reject_policy: caller
+
+threadpool: bulk:
+
+  type: fixed
+  size: 2
+  queue_size: 50
+
+ps : sysctl -p 确保 vm.max_map_count=262144
+
+配置文件2： /etc/sysconfig/elasticsearch 文件说明：
+ES服务目录
+
+ES_HOME=/usr/share/elasticsearch
+ES配置文件目录
+
+CONF_DIR=/etc/elasticsearch
+ES 数据目录
+
+DATA_DIR=/data1/elasticsearch/data
+ES 日志目录
+
+LOG_DIR=/var/log/elasticsearch
+ES 进程PID文件位置
+
+PID_DIR=/var/run/elasticsearch
+ES_HEAP_SIZE表示JVM参数的-Xms and -Xmx设置，默认256M，建议设置内存的50%，但是不能超过31g
+
+ES_HEAP_SIZE=4g
+打开文件数
+
+MAX_OPEN_FILES=65535配置文件3 : /usr/share/elasticsearch/bin/elasticsearch.in.sh
+ES 的内存配置
+
+if [ "x$ES_MIN_MEM" = "x" ]; then
+
+ES_MIN_MEM=5g
+
+fiif [ "x$ES_MAX_MEM" = "x" ]; then
+
+ES_MAX_MEM=6g
+
+内存设置超过6G时， 需要联系开发，测试使用新的GC回收机制
+内存配置6G一下的GC
+
+if [ "x$ES_GC_OPTS" = "x" ]; then
+ES_GC_OPTS="$ES_GC_OPTS -XX:+UseParNewGC"
+ES_GC_OPTS="$ES_GC_OPTS -XX:+UseConcMarkSweepGC"
+ES_GC_OPTS="$ES_GC_OPTS -XX:CMSInitiatingOccupancyFraction=75"
+ES_GC_OPTS="$ES_GC_OPTS -XX:+UseCMSInitiatingOccupancyOnly"
+fi
+内存配置6G以上的的GC
+if [ "x$ES_GC_OPTS" = "x" ]; then
+ES_GC_OPTS="$ES_GC_OPTS -XX:+UseG1GC"
+ES_GC_OPTS="$ES_GC_OPTS -XX:MaxGCPauseMillis=200"
+fi
+
+编辑3) 启动ES
+
+注：启动服务前请确保数据目录和插件目录，用户elasticsearch 拥有写权限，不要使用777附权限
+添加开机启动项： # chkconfig –add elasticsearch;chkconfig elasticsearch on
+启动/停止/重启： # service elasticsearch start/stop/restart
+
+编辑4) 检查
+
+浏览器访问 http://ip:9200
+
+查看分配的建立情况，ES的健康度为绿色 http://ip:9200/_plugin/head/
+
+编辑
+
+    插件安装
+
+插件目录：/usr/share/elasticsearch/plugins1) 插件：head
+
+    下载插件包
+    下载地址： http://xxx/soft/elasticsearch...
+
+解压缩插件包： # unzip elasticsearch-head-master.zip移动插件包目录 # mv elasticsearch-head-master /usr/share/elasticsearch/plugins/head
+
+    验证插件插件安装完成后，请重启elasticsearch服务
+
+在浏览器输入地址访问: http://ip:9200/_plugin/head/
+
+可以看到当前集群下的所有节点
+
+2) 插件：bigdesk
+
+    下载插件包
+    下载地址： http://xxx/soft/elasticsearch...
+
+解压缩插件包： # unzip bigdesk-master.zip移动插件包目录 # mv bigdesk-master /usr/share/elasticsearch/plugins/bigdesk
+
+    验证插件插件安装完成后，请重启elasticsearch服务
+
+在浏览器输入地址访问: http://ip:9200/_plugin/bigdesk/
+
+分词包插件（ 专属elasticseach 2.1）安装：
+
+/usr/share/elasticsearch/plugins
+
+修改启动文件：
+
+[root@es-46-68-76 bin]# pwd
+/usr/share/elasticsearch/bin
+修改 elasticsearch.in.sh
+
+ES_CLASSPATH=“$ES_HOME/lib/elasticsearch-2.1.1.jar:$ES_HOME/lib: $ES_HOME/lib/*”
+
+使启动时，能添加lib目录。
+
+修改配置文件
+/etc/elasticsearch
+修改elasticsearch.yml
+
+此处参考“2) 配置ES”
+
+上传分词包：
+上传hanlp文件
+此地存放分词包,并进行授权。
+
+[root@es-46-68-76 elasticsearch]# pwd
+/etc/elasticsearch
+[root@es-46-68-76 elasticsearch]# ll -tr
+total 32
+-rwxr-x— 1 root elasticsearch 2571 Oct 21 2015 logging.yml
+-rw-r–r– 1 root root 13654 Dec 14 14:01 elasticsearch.yml.rpmsave
+drwxr-x— 2 root elasticsearch 4096 Dec 15 21:37 scripts
+drwxr-xr-x 3 root elasticsearch 4096 Apr 21 15:09 hanlp
+-rwxr-x— 1 root elasticsearch 4011 Apr 27 14:54 elasticsearch.yml
+
+重启elasticsearch，即可使用。
+
+编辑
+Notes
+对于单主节点的ES，可以把主配置为非数据节点，保证主节点的稳定性
+可以配置 indices.fielddata.cache.size属性，防止内存溢出
