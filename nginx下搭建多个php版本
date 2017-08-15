@@ -1,0 +1,161 @@
+因为还有不少的开源程序未兼容 PHP 7，所以在已有的 CentOS 7， PHP 7，MySQL 5.7 和 Nginx 1.8 环境下再安装 PHP 5. 关于 PHP 7 的安装，请参考：http://www.lnmp.cn/installing-php7-mysql57-nginx18-under-centos7.html
+安装 PHP 5.6
+
+PHP 5 和 PHP 7 的安装其实是大同小异。目前最新版本是 php-5.6.21。先下载源码：
+
+    [root@lnmp ~]# cd /usr/local/src
+    [root@lnmp src]# wget -c http://cn2.php.net/distributions/php-5.6.21.tar.gz
+
+解压：
+
+    [root@lnmp src]# tar -zxvf php-5.6.21.tar.gz
+
+configure. 其中安装路径为 /usr/local/php5：
+
+    [root@lnmp src]# cd php-5.6.21/
+    [root@lnmp php-5.6.21]# ./configure  --prefix=/usr/local/php5 --enable-fpm --with-mysql  --with-mysqli --with-zlib --with-curl --with-gd --with-jpeg-dir --with-png-dir --with-freetype-dir --with-openssl --enable-mbstring --enable-xml --enable-session --enable-ftp --enable-pdo
+
+安装：
+
+    [root@lnmp php-5.6.21]# make
+    [root@lnmp php-5.6.21]# make install
+
+配置 PHP 5.6
+
+    [root@lnmp php-5.6.21]# cp php.ini-development /usr/local/php5/lib/php.ini
+    [root@lnmp php-5.6.21]# vim /usr/local/php5/lib/php.ini
+
+查找 mysql.default_socket 改成
+
+    mysql.default_socket = /var/lib/mysql/mysql.sock
+
+查找 mysqli.default_socket 改成：
+
+    mysqli.default_socket = /var/lib/mysql/mysql.sock
+
+根据自己需要修改时区，查找 date.timezone，将前面的 ; 去掉，改成：
+
+    date.timezone = PRC
+
+好了，PHP 5.6 已经安装完成：
+
+    root@lnmp php-5.6.21]# /usr/local/php5/bin/php -v
+    PHP 5.6.21 (cli) (built: May 18 2016 17:31:13)
+    Copyright (c) 1997-2016 The PHP Group
+    Zend Engine v2.6.0, Copyright (c) 1998-2016 Zend Technologies
+
+配置 php-fpm
+
+    [root@lnmp php-5.6.21]# cp /usr/local/php5/etc/php-fpm.conf.default /usr/local/php5/etc/php-fpm.conf
+    [root@lnmp php-5.6.21]# vim /usr/local/php5/etc/php-fpm.conf
+
+查找 user 将
+
+    user = nobody
+    group = nobody
+
+改成
+
+    user = nginx
+    group = nginx
+
+查找 listen 将
+
+    listen = 127.0.0.1:9000
+
+改成
+
+    listen = 127.0.0.1:9001
+
+这里是因为 PHP 7 已经占用了 9000 端口，所以用 9001 端口
+配置 php-fpm 服务
+
+因为 PHP 7 的服务文件为 php-fpm.service 所以这里用 php5-fpm.service
+
+    [root@lnmp php-5.6.21]# cp sapi/fpm/php-fpm.service /usr/lib/systemd/system/php5-fpm.service
+    [root@lnmp php-5.6.21]# vim /usr/lib/systemd/system/php5-fpm.service
+
+将：
+
+    PIDFile=${prefix}/var/run/php-fpm.pid
+    ExecStart=${exec_prefix}/sbin/php-fpm --nodaemonize --fpm-config ${prefix}/etc/php-fpm.conf
+
+改成
+
+    PIDFile=/usr/local/php5/var/run/php-fpm.pid
+    ExecStart=/usr/local/php5/sbin/php-fpm --nodaemonize --fpm-config /usr/local/php5/etc/php-fpm.conf
+
+这里做的就是用刚才 PHP 5 安装路径替代 prefix 变量
+
+重新载入 systemd
+
+    [root@lnmp php-5.6.21]# systemctl daemon-reload
+
+可以设置开机启动：
+
+    [root@lnmp php-5.6.21]# systemctl enable php5-fpm
+
+立即启动 php-fpm
+
+    [root@lnmp php-5.6.21]# systemctl start php5-fpm
+
+查看状态：
+
+    [root@lnmp php-5.6.21]# systemctl status php5-fpm
+    php5-fpm.service - The PHP FastCGI Process Manager
+       Loaded: loaded (/usr/lib/systemd/system/php5-fpm.service; disabled)
+       Active: active (running) since Wed 2016-05-18 18:06:40 CST; 28s ago
+     Main PID: 5867 (php-fpm)
+       CGroup: /system.slice/php5-fpm.service
+               ├─5867 php-fpm: master process (/usr/local/php5/etc/php-fpm.conf)
+               ├─5868 php-fpm: pool www
+               └─5869 php-fpm: pool www
+    May 18 18:06:40 lnmp.cn systemd[1]: Started The PHP FastCGI Process Manager.
+    [root@lnmp php-5.6.21]#
+
+配置不同的 nginx 站点使用不用的 PHP 版本
+
+为网站创建一个目录：
+
+    [root@lnmp php-5.6.21]# mkdir -p /www/dev.lnmp.cn
+
+创建 phpinfo 文件
+
+    [root@lnmp php-5.6.21]# vim /www/dev.lnmp.cn/phpinfo.php
+
+输入，并保存：
+
+    <?php
+    phpinfo();
+
+创建 nginx 站点配置文件
+
+    [root@lnmp php-5.6.21]# cd /etc/nginx/conf.d/
+    [root@lnmp conf.d]# vim dev.lnmp.cn.conf
+
+输入，并且保存:
+
+    server {
+        listen       80;
+        server_name  dev.lnmp.cn;
+        root         /www/dev.lnmp.cn;
+        location / {
+            index  index.php index.html index.htm;
+        }
+        location ~ \.php$ {
+            fastcgi_pass   127.0.0.1:9001;
+            fastcgi_index  index.php;
+            fastcgi_param  SCRIPT_FILENAME  $document_root$fastcgi_script_name;
+            include        fastcgi_params;
+        }
+    }
+
+控制那个站点使用那个版本的 PHP 关键是在 fastcgi_pass 的端口：
+
+    fastcgi_pass   127.0.0.1:9001;
+
+9001 是 PHP 5 端口，如果要用 PHP 7，则用 9000端口。
+
+应该大功告成了，立即 reload nginx
+
+    [root@lnmp conf.d]# systemctl reload nginx
